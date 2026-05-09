@@ -46,9 +46,6 @@ To run this project locally, ensure you have Python installed on your machine.
 [Watch the 3-5 minute Demo Video Here](https://www.google.com/search?q=Link_to_your_YouTube_or_Google_Drive_Video)
 ## Team Members
 
-  * Team Member 1 (Role)
-  * Team Member 2 (Role)
-  * Team Member 3 (Role)
-  * Team Member 4 (Role)
+ 
 
 <!-- end list -->
