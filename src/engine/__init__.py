@@ -1,9 +1,3 @@
-"""
-engine/__init__.py
-------------------
-Public interface for the Quoridor game engine.
-Import from here rather than from individual modules.
-"""
 
 from .board       import Board, P1, P2, BOARD_SIZE, WALLS_PER_PLAYER, GOAL_ROW
 from .player      import Player, make_human, make_ai
