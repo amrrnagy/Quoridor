@@ -1,25 +1,29 @@
 # ai/evaluation.py
-
-# from engine.board import Board, P1, P2
-# from engine.pathfinding import shortest_path_length
-# from engine.rules import is_game_over, get_winner
+from engine.board import Board, P1, P2
+from engine.pathfinding import shortest_path_length
 
 
-def evaluate_board(board: Board, ai_player: int) -> float:
+def evaluate_board(board: Board, ai_player: int, use_advanced_heuristic: bool) -> float:
     """
-    Evaluates the board state and returns a score for the ai_player.
-
-    Logic Steps:
-    1. Check if the game is over. If the AI won, return a massive positive number (e.g., float('inf')).
-       If the AI lost, return a massive negative number (e.g., float('-inf')).
-    2. Identify the opponent.
-    3. Use the shortest_path_length() function to find out how many steps
-       the AI needs to reach its goal.
-    4. Find out how many steps the opponent needs.
-    5. Calculate the score: (opponent steps to goal) - (AI steps to goal).
-       (Optional Bonus): Add a small weight based on how many walls the AI has left
-       vs how many the opponent has left.
+    Calculates the score of the board. Positive means AI is winning.
     """
+    opponent = P2 if ai_player == P1 else P1
 
-    # TODO: Implement the evaluation logic here
-    pass
+    # 1. Base metric: Distance to goal (Needed for all difficulties)
+    ai_distance = shortest_path_length(board, ai_player)
+    opp_distance = shortest_path_length(board, opponent)
+
+    # Base score: If opponent is 8 steps away and AI is 3, score is +5
+    score = opp_distance - ai_distance
+
+    # 2. Advanced metric: Only used for "Hard" mode
+    if use_advanced_heuristic:
+        ai_walls = board.get_walls_left(ai_player)
+        opp_walls = board.get_walls_left(opponent)
+
+        # Example formula: Give a small point bonus for hoarding walls
+        # Adjust this multiplier (0.5) through testing!
+        wall_advantage = (ai_walls - opp_walls) * 0.5
+        score += wall_advantage
+
+    return score
