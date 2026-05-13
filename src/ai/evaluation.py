@@ -1,6 +1,6 @@
 # ai/evaluation.py
-from engine.board import Board, P1, P2
-from engine.pathfinding import shortest_path_length
+from ..engine.board import Board, P1, P2
+from ..engine.pathfinding import shortest_path_length
 
 
 def evaluate_board(board: Board, ai_player: int, use_advanced_heuristic: bool) -> float:

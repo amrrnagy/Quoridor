@@ -1,10 +1,10 @@
 # ai/agent.py
-from engine.board import Board
-from ai.minimax import get_best_move_minimax
+from ..engine.board import Board
+from ..ai.minimax import get_best_move_minimax
 
 
 class AIAgent:
-    def __init__(self, player_id: int, difficulty: str = "Medium"):
+    def __init__(self, player_id: int, difficulty: str = "Easy"):
         self.player_id = player_id
         self.difficulty = difficulty
 

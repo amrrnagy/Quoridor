@@ -1,8 +1,8 @@
 # ai/minimax.py
 import copy
-from engine.board import Board
-from engine.rules import get_all_legal_actions, apply_pawn_move, apply_wall, is_game_over
-from ai.evaluation import evaluate_board
+from ..engine.board import Board
+from ..engine.rules import get_all_legal_actions, apply_pawn_move, apply_wall, is_game_over
+from ..ai.evaluation import evaluate_board
 
 
 def get_best_move_minimax(board: Board, depth: int, ai_player: int, use_advanced_heuristic: bool) -> tuple:
