@@ -17,13 +17,12 @@ def evaluate_board(board: Board, ai_player: int, use_advanced_heuristic: bool) -
     """
     opponent = P2 if ai_player == P1 else P1
 
-    # ── OPTIMIZATION 2: Early terminal detection ──────────────────────────────
     # If a player has already won, return immediately without computing BFS.
     # This is the cheapest possible evaluation — O(1) vs O(n²) for BFS.
-    if board.has_player_won(ai_player):
-        return WIN_SCORE
-    if board.has_player_won(opponent):
-        return LOSS_SCORE
+    if board.winner == ai_player:
+        return float('inf')
+    elif board.winner is not None:  # Someone else won
+        return float('-inf')
 
     # BFS distances (only called on non-terminal boards)
     ai_distance  = shortest_path_length(board, ai_player)

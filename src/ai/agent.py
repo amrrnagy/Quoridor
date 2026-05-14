@@ -2,7 +2,6 @@
 from ..engine.board import Board
 from ..ai.minimax import get_best_move_minimax
 
-# ── OPTIMIZATION 1: Config table replaces if/elif chain ──────────────────────
 # Adding a new difficulty = adding one line to the dict, not editing if/elif.
 # Keeps __init__ from growing as the game expands.
 _DIFFICULTY_CONFIG = {
@@ -18,7 +17,6 @@ class AIAgent:
         self.player_id  = player_id
         self.difficulty = difficulty
 
-        # ── OPTIMIZATION 2: Single dict.get() lookup ──────────────────────────
         config = _DIFFICULTY_CONFIG.get(difficulty, _DEFAULT_CONFIG)
         self.depth                 = config["depth"]
         self.use_advanced_heuristic = config["use_advanced_heuristic"]

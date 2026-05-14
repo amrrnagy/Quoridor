@@ -23,21 +23,26 @@ def get_best_move_minimax(board: Board, depth: int, ai_player: int, use_advanced
     return minimax(board, depth, float('-inf'), float('inf'), True, ai_player, use_advanced_heuristic)
 
 
-def _board_key(board: Board) -> tuple:
+# Inside src/ai/minimax.py
+
+def _board_key(board):
     """
-    Produces a lightweight hashable key from the board state.
-    Used as the transposition table lookup key.
-    Only captures what actually affects the game tree:
-      - Both players' positions
-      - All placed walls
-      - Whose turn it is
+    Creates a unique, hashable representation of the current board state.
+    Used for memoization in the transposition table.
     """
     return (
-        tuple(board.get_player_position(p) for p in range(2)),
-        tuple(sorted(board.get_placed_walls())),
-        board.current_player,
-    )
+        # 1. Pawn positions (converted to a sorted tuple of items)
+        tuple(sorted(board.positions.items())),
 
+        # 2. Horizontal walls (converted to a frozenset for hashing)
+        frozenset(board.h_walls),
+
+        # 3. Vertical walls (converted to a frozenset for hashing)
+        frozenset(board.v_walls),
+
+        # 4. The current player's turn
+        board.current_player
+    )
 
 def _sort_actions(actions: list) -> list:
     """

@@ -23,15 +23,20 @@ def run_test_game():
 
         if board.current_player == P1:
             print("\n--- HUMAN TURN (P1) ---")
-            # For quick testing, let's just hardcode a simple move for the human
-            # In a real terminal test, you could use input() to type coordinates
-            print("Human moves down...")
-            r, c = board.get_position(P1)
+            board.pretty_print()
+
+            # Get input from the terminal
             try:
-                apply_pawn_move(board, P1, (r + 1, c))
+                move_input = input("Enter your move as 'row col' (e.g., 2 4): ")
+                r_inp, c_inp = map(int, move_input.split())
+                target = (r_inp, c_inp)
+
+                # The engine already has validation logic in rules.py
+                apply_pawn_move(board, P1, target)
+                print(f"Human moved to {target}")
             except ValueError as e:
-                print(f"Human move failed: {e}")
-                break  # Stop the test if we hit an error
+                print(f"Invalid input or illegal move: {e}. Try again.")
+                continue  # This keeps the turn on P1 so you can retry
 
         else:
             print("\n--- AI TURN (P2) ---")
