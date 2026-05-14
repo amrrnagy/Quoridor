@@ -2,6 +2,14 @@
 from ..engine.board import Board, P1, P2
 from ..engine.pathfinding import shortest_path_length
 
+# ── OPTIMIZATION 1: Win/Loss constants ───────────────────────────────────────
+# Using concrete large numbers instead of float('inf') is safer for arithmetic
+# and prevents accidental NaN or overflow when scores are combined.
+WIN_SCORE  =  10_000.0
+LOSS_SCORE = -10_000.0
+
+WALL_WEIGHT = 0.5   # Easy to tune in one place
+
 
 def evaluate_board(board: Board, ai_player: int, use_advanced_heuristic: bool) -> float:
     """
@@ -9,21 +17,29 @@ def evaluate_board(board: Board, ai_player: int, use_advanced_heuristic: bool) -
     """
     opponent = P2 if ai_player == P1 else P1
 
-    # 1. Base metric: Distance to goal (Needed for all difficulties)
-    ai_distance = shortest_path_length(board, ai_player)
+    # ── OPTIMIZATION 2: Early terminal detection ──────────────────────────────
+    # If a player has already won, return immediately without computing BFS.
+    # This is the cheapest possible evaluation — O(1) vs O(n²) for BFS.
+    if board.has_player_won(ai_player):
+        return WIN_SCORE
+    if board.has_player_won(opponent):
+        return LOSS_SCORE
+
+    # BFS distances (only called on non-terminal boards)
+    ai_distance  = shortest_path_length(board, ai_player)
     opp_distance = shortest_path_length(board, opponent)
 
-    # Base score: If opponent is 8 steps away and AI is 3, score is +5
+    # ── OPTIMIZATION 3: Unreachable path guard ────────────────────────────────
+    # shortest_path_length returns -1 (or None) when no path exists.
+    # Treat that as a guaranteed win/loss rather than crashing on arithmetic.
+    if ai_distance  <= 0: return WIN_SCORE
+    if opp_distance <= 0: return LOSS_SCORE
+
     score = opp_distance - ai_distance
 
-    # 2. Advanced metric: Only used for "Hard" mode
     if use_advanced_heuristic:
-        ai_walls = board.get_walls_left(ai_player)
+        ai_walls  = board.get_walls_left(ai_player)
         opp_walls = board.get_walls_left(opponent)
-
-        # Example formula: Give a small point bonus for hoarding walls
-        # Adjust this multiplier (0.5) through testing!
-        wall_advantage = (ai_walls - opp_walls) * 0.5
-        score += wall_advantage
+        score += (ai_walls - opp_walls) * WALL_WEIGHT
 
     return score
