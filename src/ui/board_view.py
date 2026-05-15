@@ -178,7 +178,6 @@ class BoardView:
             self._draw_wall_preview(screen, wall_preview)
 
         # Draw auras beneath pawns
-        self._draw_player_aura(screen, board, anim_t, ai_thinking)
         self._draw_ghost_pawns(screen, board, valid_moves, anim_t)
         self._draw_pawns(screen, board)
 
@@ -358,29 +357,15 @@ class BoardView:
             • Rim shine    (lighter arc at bottom edge)
             • Specular dot (white highlight, offset top-left)
         """
-        r = self.cell_size // 3
+        for player, base_color in [(P1, _P1_COLOR), (P2, _P2_COLOR)]:
+            r, c = board.get_position(player)
+            cx, cy = self.cell_center((r, c))
 
-        for player, base_col in ((P1, _P1_COLOR), (P2, _P2_COLOR)):
-            cx, cy = self.cell_center(board.get_position(player))
-
-            # Shadow ring
-            shadow = pygame.Surface((r * 2 + 8, r * 2 + 8), pygame.SRCALPHA)
-            pygame.draw.circle(shadow, (0, 0, 0, 80), (r + 4, r + 4), r + 4)
-            screen.blit(shadow, (cx - r - 4, cy - r - 2))
-
-            # Core fill
-            pygame.draw.circle(screen, base_col, (cx, cy), r)
-
-            # Rim shine – lighter version of base colour at bottom-right
-            shine_col = tuple(min(255, v + 60) for v in base_col)
-            shine = pygame.Surface((r * 2, r * 2), pygame.SRCALPHA)
-            pygame.draw.circle(shine, (*shine_col, 80),    # type: ignore[arg-type]
-                               (r + 5, r + 5), r - 2)
-            screen.blit(shine, (cx - r, cy - r))
-
-            # Specular highlight dot
-            pygame.draw.circle(screen, _SPEC_WHITE,
-                               (cx - r // 3, cy - r // 3), max(2, r // 5))
+            # Draw gradient/layered glowing effect
+            radius = self.cell_size // 3
+            pygame.draw.circle(screen, (*base_color, 80), (cx, cy), radius + 4)  # Outer glow
+            pygame.draw.circle(screen, base_color, (cx, cy), radius)  # Core
+            pygame.draw.circle(screen, (255, 255, 255), (cx - 4, cy - 4), 4)  # Specular highlight
 
     # ── Click identification ────────────────────────────────────────────────
 

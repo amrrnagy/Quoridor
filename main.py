@@ -7,8 +7,8 @@ from src.ui.menu_scene import MenuScene
 def main() -> None:
     pygame.init()
 
-    WINDOW_TITLE = "Quoridor AI"
-    W, H = 900, 750
+    WINDOW_TITLE = "Quoridor"
+    W, H = 1000, 750
 
     screen = pygame.display.set_mode((W, H))
     pygame.display.set_caption(WINDOW_TITLE)
