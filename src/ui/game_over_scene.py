@@ -33,7 +33,7 @@ _PARTICLE_PALETTE = [
     (255, 255, 255, 210),  
 ]
 
-_SLIDE_DURATION_S = 0.38    
+_SLIDE_DURATION_S = 0.85
 _GRAVITY_PX_S2    = 300.0   
 
 # ── Procedural Vector Icons ──

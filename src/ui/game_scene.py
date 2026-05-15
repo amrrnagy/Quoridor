@@ -28,10 +28,8 @@ RED_DARK = (163, 45, 45)
 RED_LIGHT = (252, 235, 235)
 
 SIDEBAR_W = 250
-_BUDGET = {"Easy": 0.5, "Medium": 2.0, "Hard": 4.5}
 
 
-# ── Graphical Helpers ──
 def _make_aura_surface(radius: int, color: tuple, rings: int = 5) -> pygame.Surface:
     size = radius * 2 + 4
     surf = pygame.Surface((size, size), pygame.SRCALPHA)
@@ -43,7 +41,6 @@ def _make_aura_surface(radius: int, color: tuple, rings: int = 5) -> pygame.Surf
     return surf
 
 
-# ── Procedural Vector Icons ──
 def _draw_icon_undo(screen, color, cx, cy):
     pygame.draw.line(screen, color, (cx + 3, cy + 3), (cx + 3, cy - 2), 2)
     pygame.draw.line(screen, color, (cx + 3, cy - 2), (cx - 2, cy - 2), 2)
@@ -91,14 +88,17 @@ class GameScene(Scene):
         self._invalid_timer = 0.0
         self._anim_t = 0.0
 
-        # Unified Modal Dialog State
-        self._active_dialog = None  # Can be None, "reset", or "menu"
+        # Delay Timers for Game Over
+        self._game_over_timer = -1.0
+        self._pending_winner_name = ""
+        self._pending_winner_idx = None
+
+        self._active_dialog = None
         self._hover_dialog_yes = False
         self._hover_dialog_no = False
         self._rect_dialog_yes = pygame.Rect(0, 0, 0, 0)
         self._rect_dialog_no = pygame.Rect(0, 0, 0, 0)
 
-        # UI Buttons
         bx = self.W - SIDEBAR_W + 16
         bw = SIDEBAR_W - 32
         btn_w = (bw - 8) // 2
@@ -107,9 +107,10 @@ class GameScene(Scene):
         self._btn_redo = pygame.Rect(bx + btn_w + 8, self.H - 238, btn_w, 42)
         self._btn_reset_rect = pygame.Rect(bx, self.H - 180, bw, 48)
         self._btn_menu_rect = pygame.Rect(bx, self.H - 124, bw, 48)
+        self._btn_exit_rect = pygame.Rect(bx, self.H - 68, bw, 48)
 
         self._hover_u, self._hover_r = False, False
-        self._hover_res, self._hover_menu = False, False
+        self._hover_res, self._hover_menu, self._hover_exit = False, False, False
 
         self._aura_blue = _make_aura_surface(28, BLUE_AI)
         self._init_engine()
@@ -135,11 +136,16 @@ class GameScene(Scene):
         self._ai_result = None
         self._turn_start = _time.monotonic()
 
+        self._game_over_timer = -1.0
+
     def on_enter(self) -> None:
         pass
 
     def handle_event(self, event: pygame.event.Event) -> None:
-        # Intercept inputs if ANY Dialog is open
+        # Ignore clicks if the game is over and we are waiting for the transition
+        if self._game_over_timer > 0:
+            return
+
         if self._active_dialog:
             if event.type == pygame.MOUSEMOTION:
                 self._hover_dialog_yes = self._rect_dialog_yes.collidepoint(event.pos)
@@ -155,26 +161,26 @@ class GameScene(Scene):
                     self._active_dialog = None
             return
 
-            # Normal Input Handling
         if event.type == pygame.MOUSEMOTION:
             self._hover_u = self._btn_undo.collidepoint(event.pos)
             self._hover_r = self._btn_redo.collidepoint(event.pos)
             self._hover_res = self._btn_reset_rect.collidepoint(event.pos)
             self._hover_menu = self._btn_menu_rect.collidepoint(event.pos)
+            self._hover_exit = self._btn_exit_rect.collidepoint(event.pos)
 
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if self._btn_reset_rect.collidepoint(event.pos):
-                # Only show Reset popup if there is history. Otherwise, do nothing.
                 if self._undo_stack or self._redo_stack:
                     self._active_dialog = "reset"
                 return
-
             if self._btn_menu_rect.collidepoint(event.pos):
-                # Only show Main Menu popup if there is history. Otherwise, go straight home.
                 if self._undo_stack or self._redo_stack:
                     self._active_dialog = "menu"
                 else:
                     self._go_to_menu()
+                return
+            if self._btn_exit_rect.collidepoint(event.pos):
+                self.manager.quit()
                 return
 
             if not self._ai_thinking:
@@ -210,6 +216,18 @@ class GameScene(Scene):
 
     def update(self, dt: float) -> None:
         self._anim_t += dt / 1000.0
+
+        # Countdown the Game Over delay if a player won
+        if self._game_over_timer > 0:
+            self._game_over_timer -= dt / 1000.0
+            if self._game_over_timer <= 0:
+                screenshot = pygame.display.get_surface().copy()
+                from src.ui.game_over_scene import GameOverScene
+                self.manager.switch(
+                    GameOverScene(self.manager, self.config, self._pending_winner_name, self._pending_winner_idx,
+                                  screenshot))
+                self._game_over_timer = -1.0  # Safe reset
+
         if self._invalid_timer > 0: self._invalid_timer = max(0.0, self._invalid_timer - dt)
         if self._ai_thinking and self._ai_result is not None: self._apply_ai_result()
 
@@ -217,8 +235,8 @@ class GameScene(Scene):
         screen.fill(BG_MAIN)
         pygame.draw.rect(screen, BG_PANEL, pygame.Rect(0, 0, self.W - SIDEBAR_W, self.H))
 
-        valid_moves = [] if self._ai_thinking else get_valid_pawn_moves(self.board, self.board.current_player)
-
+        valid_moves = [] if self._ai_thinking or self._game_over_timer > 0 else get_valid_pawn_moves(self.board,
+                                                                                                     self.board.current_player)
         self._draw_aura_under_ai_pawn(screen)
 
         try:
@@ -233,17 +251,13 @@ class GameScene(Scene):
             self._draw_invalid_banner(screen, min(255, int(self._invalid_timer / 400 * 255)))
 
         self._draw_sidebar(screen)
-
-        if self._active_dialog:
-            self._draw_dialog(screen)
+        if self._active_dialog: self._draw_dialog(screen)
 
     def _draw_dialog(self, screen: pygame.Surface) -> None:
-        """Draws a unified modal confirmation dialog for Reset and Main Menu."""
         overlay = pygame.Surface((self.W, self.H), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 160))
         screen.blit(overlay, (0, 0))
 
-        # Adjusted for perfect text breathing room
         dw, dh = 400, 210
         dx = (self.W - dw) // 2
         dy = (self.H - dh) // 2
@@ -253,29 +267,18 @@ class GameScene(Scene):
         pygame.draw.rect(screen, BORDER_A, dialog, width=2, border_radius=12)
 
         if self._active_dialog == "reset":
-            title = "Reset Game?"
-            sub1 = "Are you sure you want to restart?"
-            sub2 = "All history and undo/redo will be cleared."
-            btn_yes = "Yes, Reset"
-            icon_yes = _draw_icon_reset
+            title, sub1, sub2, btn_yes, icon_yes = "Reset Game?", "Are you sure you want to restart?", "All history and undo/redo will be cleared.", "Yes, Reset", _draw_icon_reset
         else:
-            title = "Main Menu?"
-            sub1 = "Are you sure you want to leave?"
-            sub2 = "Current game progress will be lost."
-            btn_yes = "Yes, Leave"
-            icon_yes = _draw_icon_home
+            title, sub1, sub2, btn_yes, icon_yes = "Main Menu?", "Are you sure you want to leave?", "Current game progress will be lost.", "Yes, Leave", _draw_icon_home
 
         lbl_title = self._font_h2.render(title, True, TEXT_PRI)
         screen.blit(lbl_title, lbl_title.get_rect(centerx=dialog.centerx, top=dy + 24))
-
         lbl_sub1 = self._font_body.render(sub1, True, TEXT_SEC)
         screen.blit(lbl_sub1, lbl_sub1.get_rect(centerx=dialog.centerx, top=dy + 64))
-
         lbl_sub2 = self._font_body.render(sub2, True, TEXT_SEC)
         screen.blit(lbl_sub2, lbl_sub2.get_rect(centerx=dialog.centerx, top=dy + 88))
 
-        bw, bh = 150, 44
-        gap = 20
+        bw, bh, gap = 150, 44, 20
         self._rect_dialog_yes = pygame.Rect(dialog.centerx - bw - gap // 2, dy + 140, bw, bh)
         self._rect_dialog_no = pygame.Rect(dialog.centerx + gap // 2, dy + 140, bw, bh)
 
@@ -307,16 +310,11 @@ class GameScene(Scene):
             screen.blit(ghost, (cx - radius, cy - radius))
 
     def _get_friendly_error(self, raw_msg: str) -> str:
-        """Translates raw engine exceptions into user-friendly UI messages."""
         msg = raw_msg.lower()
-        if "pawn move" in msg:
-            return "Invalid move: You cannot move your pawn there."
-        if "block" in msg or "path" in msg:
-            return "Invalid wall: This completely blocks a player's path."
-        if "no walls" in msg or "out of walls" in msg:
-            return "Invalid wall: You have no walls left to place."
-        if "wall placement" in msg or "overlap" in msg or "intersect" in msg:
-            return "Invalid wall: You cannot place a wall there."
+        if "pawn move" in msg: return "Invalid move: You cannot move your pawn there."
+        if "block" in msg or "path" in msg: return "Invalid wall: This completely blocks a player's path."
+        if "no walls" in msg or "out of walls" in msg: return "Invalid wall: You have no walls left to place."
+        if "wall placement" in msg or "overlap" in msg or "intersect" in msg: return "Invalid wall: You cannot place a wall there."
         return "Invalid move: Action not allowed."
 
     def _handle_board_click(self, pos: tuple) -> None:
@@ -338,9 +336,7 @@ class GameScene(Scene):
             if self.agent and not is_game_over(self.board) and self.board.current_player == P2:
                 self._launch_ai_thread()
         except ValueError as e:
-            # Catch the raw engine error and translate it!
-            friendly_msg = self._get_friendly_error(str(e))
-            self._flash_invalid(friendly_msg)
+            self._flash_invalid(self._get_friendly_error(str(e)))
 
     def _launch_ai_thread(self) -> None:
         self._ai_thinking = True
@@ -372,52 +368,41 @@ class GameScene(Scene):
         self._check_winner()
 
     def _check_winner(self) -> None:
-        if is_game_over(self.board):
+        # Instead of instantly switching, we queue up the winner and start a delay timer!
+        if self._game_over_timer < 0 and is_game_over(self.board):
             winner_idx = get_winner(self.board)
             if winner_idx == P1:
-                name = f"{self.config.p1_name} (Red)"
+                self._pending_winner_name = f"{self.config.p1_name} (Red)"
             else:
-                if self.agent:
-                    # UI Presentation Mapping
-                    ai_names = {"Easy": "Ashraf", "Medium": "Yahia", "Hard": "Amr"}
-                    ai_disp = ai_names.get(self.config.difficulty_label, "AI")
-                    name = f"{ai_disp} (Blue)"
-                else:
-                    name = f"{self.config.p2_name} (Blue)"
+                ai_names = {"Easy": "Ashraf", "Medium": "Yahia", "Hard": "Amr"}
+                ai_disp = ai_names.get(self.config.difficulty_label, "AI")
+                self._pending_winner_name = f"{ai_disp} (Blue)" if self.agent else f"{self.config.p2_name} (Blue)"
 
-            screenshot = pygame.display.get_surface().copy()
-            from src.ui.game_over_scene import GameOverScene
-            self.manager.switch(GameOverScene(self.manager, self.config, name, winner_idx, screenshot))
+            self._pending_winner_idx = winner_idx
+            self._game_over_timer = 0.3  # Wait before the popup!
 
     def _flash_invalid(self, msg: str):
         self._invalid_msg = msg
         self._invalid_timer = 2000
 
     def _draw_invalid_banner(self, screen, alpha):
-        # Render just the text (no warning glyph in the string)
         surf = self._font_small.render(self._invalid_msg, True, RED_LIGHT)
-
-        # Calculate padding to comfortably fit the new icon and text
         pad_w = surf.get_width() + 44
         pad_h = surf.get_height() + 16
         pad = pygame.Rect(0, 0, pad_w, pad_h)
         pad.centerx = (self.W - SIDEBAR_W) // 2
-        pad.bottom = self.H - 24  # Lifted slightly for better spacing
+        pad.bottom = self.H - 24
 
-        # Draw background card with rounded corners
         banner = pygame.Surface((pad.w, pad.h), pygame.SRCALPHA)
         pygame.draw.rect(banner, (*RED_DARK, alpha), (0, 0, pad.w, pad.h), border_radius=6)
         pygame.draw.rect(banner, (*RED_LIGHT, alpha), (0, 0, pad.w, pad.h), width=1, border_radius=6)
 
-        # Procedural Warning Triangle (!)
         cx, cy = 18, pad.h // 2
         pygame.draw.polygon(banner, (*RED_LIGHT, alpha), [(cx, cy - 6), (cx - 7, cy + 6), (cx + 7, cy + 6)], 2)
-        pygame.draw.rect(banner, (*RED_LIGHT, alpha), (cx - 1, cy - 2, 2, 4))  # Exclamation top line
-        pygame.draw.rect(banner, (*RED_LIGHT, alpha), (cx - 1, cy + 4, 2, 2))  # Exclamation bottom dot
+        pygame.draw.rect(banner, (*RED_LIGHT, alpha), (cx - 1, cy - 2, 2, 4))
+        pygame.draw.rect(banner, (*RED_LIGHT, alpha), (cx - 1, cy + 4, 2, 2))
 
         screen.blit(banner, pad.topleft)
-
-        # Blit the text next to the icon
         txt_surf = surf.copy()
         txt_surf.set_alpha(alpha)
         screen.blit(txt_surf, (pad.x + 32, pad.y + 8))
@@ -437,16 +422,11 @@ class GameScene(Scene):
 
         current = self.board.current_player
         ai_names = {"Easy": "Ashraf", "Medium": "Yahia", "Hard": "Amr"}
-
         if current == P1:
             name = f"{self.config.p1_name} (Red)"
         else:
-            if self.agent:
-                # Map for UI Display
-                ai_disp = ai_names.get(self.config.difficulty_label, "AI")
-                name = f"{ai_disp} (Blue)"
-            else:
-                name = f"{self.config.p2_name} (Blue)"
+            ai_disp = ai_names.get(self.config.difficulty_label, "AI")
+            name = f"{ai_disp} (Blue)" if self.agent else f"{self.config.p2_name} (Blue)"
 
         dot_col = RED_PLAYER if current == P1 else BLUE_AI
         self._draw_icon_player(screen, (x + 28, y + 62), dot_col, scale=1.2)
@@ -479,41 +459,31 @@ class GameScene(Scene):
         walls = [self.board.get_walls_left(P1), self.board.get_walls_left(P2)]
         for i, (cnt, col, label) in enumerate(zip(walls, [RED_PLAYER, BLUE_AI], ["Red", "Blue"])):
             py = y + 56 + i * 42
-
-            # Draw the player icon
             self._draw_icon_player(screen, (x + 24, py), col, scale=0.8)
-
-            # Draw the 10 indicator squares
             for w in range(10):
                 wr = pygame.Rect(x + 44 + w * 14, py - 6, 10, 10)
                 pygame.draw.rect(screen, col if w < cnt else BORDER, wr, border_radius=3)
 
-            # Draw the numeric count right after the squares
             lbl_count = self._font_body.render(str(cnt), True, TEXT_PRI)
             screen.blit(lbl_count, (x + 192, py - lbl_count.get_height() // 2))
-
         y += 136
 
         # 4. Action Buttons
         undo_ok = bool(self._undo_stack) and not self._ai_thinking
         redo_ok = bool(self._redo_stack) and not self._ai_thinking
 
-        # Pass our new procedural icon drawing functions instead of font text
         self._draw_btn(screen, self._btn_undo, _draw_icon_undo, "Undo", self._hover_u, undo_ok)
         self._draw_btn(screen, self._btn_redo, _draw_icon_redo, "Redo", self._hover_r, redo_ok)
-
         self._draw_action_btn(screen, self._btn_reset_rect, _draw_icon_reset, "Reset Game", self._hover_res)
         self._draw_action_btn(screen, self._btn_menu_rect, _draw_icon_home, "Main Menu", self._hover_menu)
 
     def _draw_icon_player(self, screen, pos, color, scale=1.0):
-        """Draws a clean, simple circular pawn with a specular highlight."""
         cx, cy = pos
         r = int(9 * scale)
         pygame.draw.circle(screen, color, (cx, cy), r)
         pygame.draw.circle(screen, (255, 255, 255), (cx - int(r * 0.3), cy - int(r * 0.3)), max(1, int(r * 0.3)))
 
     def _draw_btn(self, screen, rect, icon_func, text, hover, enabled):
-        """Draws buttons with dynamically centered text and procedural icons."""
         col = BG_CARD_A if hover and enabled else BG_CARD
         bc = BORDER_A if hover and enabled else BORDER
         pygame.draw.rect(screen, col, rect, border_radius=8)
@@ -521,16 +491,13 @@ class GameScene(Scene):
 
         txt_col = TEXT_PRI if enabled else TEXT_DIM
         lbl = self._font_body.render(text, True, txt_col)
-
-        # 16 is approx width of icon, 8 is the gap
         total_w = 16 + 8 + lbl.get_width()
         start_x = rect.x + (rect.w - total_w) // 2
 
-        icon_func(screen, txt_col, start_x + 8, rect.centery)
-        screen.blit(lbl, (start_x + 24, rect.centery - lbl.get_height() // 2))
+        icon_func(screen, txt_col, start_x + 6, rect.centery)
+        screen.blit(lbl, (start_x + 20, rect.centery - lbl.get_height() // 2))
 
     def _draw_action_btn(self, screen, rect, icon_func, text, hover):
-        """Draws wide action buttons perfectly centered."""
         bg = BG_CARD_A if hover else BG_CARD
         brd = BORDER_A if hover else BORDER
         pygame.draw.rect(screen, bg, rect, border_radius=10)
@@ -538,9 +505,8 @@ class GameScene(Scene):
 
         txt_col = TEXT_PRI if hover else TEXT_SEC
         lbl = self._font_body.render(text, True, txt_col)
-
         total_w = 16 + 12 + lbl.get_width()
         start_x = rect.x + (rect.w - total_w) // 2
 
-        icon_func(screen, txt_col, start_x + 8, rect.centery)
-        screen.blit(lbl, (start_x + 28, rect.centery - lbl.get_height() // 2))
+        icon_func(screen, txt_col, start_x + 6, rect.centery)
+        screen.blit(lbl, (start_x + 24, rect.centery - lbl.get_height() // 2))
