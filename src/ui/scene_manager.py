@@ -1,5 +1,5 @@
+#src/ui/scene_manager.py
 """
-src/ui/scene_manager.py  —  Grandmaster Edition
 ================================================
 Scene Manager + Fade Transition engine.
 

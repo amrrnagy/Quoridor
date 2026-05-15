@@ -1,52 +1,20 @@
 """
 src/ui/menu_scene.py  —  Grandmaster Edition
-============================================
-Main landing page / configuration selector.
-
-Visual Features
-───────────────
-1.  ENTRANCE FADE
-    The entire scene fades in over 500 ms using a black overlay whose alpha
-    decreases from 255 → 0.  Powered by on_enter() timestamp + draw().
-
-2.  DYNAMIC PARTICLE BACKGROUND
-    40 ambient particles drift slowly upward.  Each has a random velocity,
-    lifetime, and size.  They are rendered with SRCALPHA for soft blending.
-
-3.  INTERACTIVE CARD SYSTEM
-    Mode cards (HvH / HvC) glow on hover and selection using a BORDER_A
-    outline.  Difficulty chips use the same system with a pill shape.
-
-4.  ANIMATED BOARD PREVIEW
-    The mini 9×9 grid on the right panel shows pulsing pawns with a
-    "breathing" aura — a preview of the in-game aesthetic.
-
-5.  GRADIENT TITLE
-    The title "QUORIDOR" is rendered in a layered tint (TEXT_PRI + PURPLE)
-    for a subtle colour wash effect.
-
-6.  KEYBOARD SHORTCUT
-    Pressing Enter starts the game immediately.
 """
 from __future__ import annotations
-
 import math
 import random
 import time as _time
-
 import pygame
 
 from src.ui.scene_manager import Scene, SceneManager
 from src.ui.game_config import GameConfig, GameMode, Difficulty
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Colour palette  (consistent across Grandmaster Edition)
-# ─────────────────────────────────────────────────────────────────────────────
-BG_MAIN    = ( 18,  17,  26)
-BG_PANEL   = ( 14,  13,  24)
-BG_CARD    = ( 30,  27,  46)
-BG_CARD_A  = ( 45,  40,  72)
+# ── colour palette ──
+BG_MAIN    = (18,  17,  26)
+BG_PANEL   = (14,  13,  24)
+BG_CARD    = (30,  27,  46)
+BG_CARD_A  = (45,  40,  72)
 PURPLE     = (127, 119, 221)
 PURPLE_DK  = ( 83,  74, 183)
 TEAL       = ( 29, 158, 117)
@@ -57,409 +25,240 @@ TEXT_DIM   = ( 90,  86, 112)
 BORDER     = ( 58,  53,  85)
 BORDER_A   = (127, 119, 221)
 
-# Entrance-fade duration in seconds
-_FADE_IN_DURATION = 0.45
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Ambient particle
-# ─────────────────────────────────────────────────────────────────────────────
 class _AmbientParticle:
-    """
-    A single slowly drifting background particle.
+    def __init__(self, w, h):
+        self.x = random.randint(0, w)
+        self.y = random.randint(0, h)
+        self.vx = random.uniform(-10, 10)
+        self.vy = random.uniform(-15, -5)
+        self.size = random.randint(2, 5)
+        self.max_life = random.uniform(3, 7)
+        self.life = self.max_life
 
-    Particles move upward with slight horizontal drift and fade out as
-    their lifetime expires, then respawn at a random bottom position.
-    """
-
-    __slots__ = ("x", "y", "vx", "vy", "size", "max_life", "life")
-
-    def __init__(self, w: int, h: int) -> None:
-        self.x        = random.randint(0, w)
-        self.y        = float(random.randint(0, h))
-        self.vx       = random.uniform(-8.0, 8.0)
-        self.vy       = random.uniform(-18.0, -5.0)  # upward drift
-        self.size     = random.randint(2, 4)
-        self.max_life = random.uniform(3.5, 7.0)
-        self.life     = random.uniform(0.0, self.max_life)  # stagger starts
-
-    def update(self, dt_s: float, w: int, h: int) -> None:
-        self.x    += self.vx * dt_s
-        self.y    += self.vy * dt_s
+    def update(self, dt_s, w, h):
+        self.x += self.vx * dt_s
+        self.y += self.vy * dt_s
         self.life -= dt_s
-        # Respawn at bottom when lifetime expires or particle exits top
         if self.life <= 0 or self.y < -10:
-            self.y    = float(h + random.randint(0, 40))
-            self.x    = random.randint(0, w)
+            self.y = h + 10
+            self.x = random.randint(0, w)
             self.life = self.max_life
 
-    def draw(self, screen: pygame.Surface) -> None:
-        alpha = int(90 * (self.life / self.max_life))
-        if alpha <= 0:
-            return
-        s = self.size
-        surf = pygame.Surface((s * 2, s * 2), pygame.SRCALPHA)
-        pygame.draw.circle(surf, (*PURPLE, alpha), (s, s), s)
-        screen.blit(surf, (int(self.x) - s, int(self.y) - s))
+    def draw(self, screen):
+        alpha = int(80 * (self.life / self.max_life))
+        s = pygame.Surface((self.size*2, self.size*2), pygame.SRCALPHA)
+        pygame.draw.circle(s, (*PURPLE, alpha), (self.size, self.size), self.size)
+        screen.blit(s, (self.x, self.y))
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# MenuScene
-# ─────────────────────────────────────────────────────────────────────────────
+class _TextBox:
+    """Interactive text input box for player names."""
+    def __init__(self, rect, default_text=""):
+        self.rect = rect
+        self.text = default_text
+        self.active = False
+
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            self.active = self.rect.collidepoint(event.pos)
+        elif event.type == pygame.KEYDOWN and self.active:
+            if event.key == pygame.K_BACKSPACE:
+                self.text = self.text[:-1]
+            elif event.key == pygame.K_RETURN:
+                self.active = False
+            elif len(self.text) < 14 and event.unicode.isprintable():
+                self.text += event.unicode
+
+    def draw(self, screen, font):
+        bg = BG_CARD_A if self.active else BG_CARD
+        brd = BORDER_A if self.active else BORDER
+        pygame.draw.rect(screen, bg, self.rect, border_radius=8)
+        pygame.draw.rect(screen, brd, self.rect, width=1, border_radius=8)
+
+        # Blinking cursor effect
+        cursor = "|" if self.active and int(_time.time() * 2) % 2 == 0 else ""
+        txt_surf = font.render(self.text + cursor, True, TEXT_PRI)
+        screen.blit(txt_surf, (self.rect.x + 16, self.rect.centery - txt_surf.get_height() // 2))
+
+
 class MenuScene(Scene):
-    """
-    Entry point for the Quoridor Grandmaster Edition.
-
-    Layout
-    ──────
-    Left panel  (x: 0 … 560)   : Title, mode selection, difficulty, start
-    Right panel (x: 560 … 900) : Animated board preview + info copy
-    """
-
-    W, H = 900, 750
+    W, H = 1000, 750
 
     def __init__(self, manager: SceneManager) -> None:
         super().__init__(manager)
-
-        # Shared config object — mutated by UI and passed to GameScene
         self.config = GameConfig()
 
-        # ── Fonts ─────────────────────────────────────────────────────────
         pygame.font.init()
         self._font_title = pygame.font.SysFont("segoeui", 64, bold=True)
-        self._font_sub   = pygame.font.SysFont("segoeui", 16)
+        self._font_sub   = pygame.font.SysFont("segoeui", 18)
         self._font_btn   = pygame.font.SysFont("segoeui", 20)
-        self._font_sect  = pygame.font.SysFont("segoeui", 12, bold=True)
-        self._font_body  = pygame.font.SysFont("segoeui", 14)
+        self._font_sect  = pygame.font.SysFont("segoeui", 13, bold=True)
 
-        # ── Animation ─────────────────────────────────────────────────────
-        self._anim_t   = 0.0
-        self._enter_t  = 0.0   # set in on_enter()
-        self._fade_surf = pygame.Surface((self.W, self.H))
-        self._fade_surf.fill((0, 0, 0))
+        self._anim_t = 0.0
+        self._particles = [_AmbientParticle(self.W, self.H) for _ in range(40)]
 
-        # ── Particles ─────────────────────────────────────────────────────
-        self._particles = [_AmbientParticle(self.W, self.H) for _ in range(45)]
+        # Interactive Text Boxes (This was missing!)
+        self._tb_p1 = _TextBox(pygame.Rect(60, 445, 200, 44), "You")
+        self._tb_p2 = _TextBox(pygame.Rect(280, 445, 200, 44), "Player 2")
 
-        # ── Button rectangles ─────────────────────────────────────────────
         self._init_buttons()
 
     def _init_buttons(self) -> None:
-        """Pre-compute all interactive element rects."""
-        # Mode selection cards (left panel)
-        self._rect_hvh   = pygame.Rect(60, 268, 450, 68)
-        self._rect_hvc   = pygame.Rect(60, 350, 450, 68)
+        self._rect_hvh = pygame.Rect(60, 250, 440, 64)
+        self._rect_hvc = pygame.Rect(60, 326, 440, 64)
+        self._rect_start = pygame.Rect(60, 620, 440, 60)
 
         # Difficulty chips
-        self._chip_rects: list[pygame.Rect] = [
-            pygame.Rect(60 + i * 152, 496, 142, 46)
-            for i in range(3)
-        ]
-
-        # Start button
-        self._rect_start = pygame.Rect(60, 596, 450, 64)
-
-    # ── Scene lifecycle ─────────────────────────────────────────────────────
-
-    def on_enter(self) -> None:
-        """Record the entry timestamp for the fade-in animation."""
-        self._enter_t = _time.monotonic()
-
-    # ── Event handling ──────────────────────────────────────────────────────
+        self._chip_rects = []
+        for i in range(3):
+            self._chip_rects.append(pygame.Rect(60 + i*146, 545, 136, 44))
 
     def handle_event(self, event: pygame.event.Event) -> None:
-        if event.type == pygame.KEYDOWN:
-            if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
-                self._launch_game()
+        # Route events to the text boxes so you can type
+        self._tb_p1.handle_event(event)
+        self._tb_p2.handle_event(event)
 
-        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            self._handle_click(event.pos)
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if self._rect_hvh.collidepoint(event.pos):
+                self.config.mode = GameMode.HUMAN_VS_HUMAN
+            elif self._rect_hvc.collidepoint(event.pos):
+                self.config.mode = GameMode.HUMAN_VS_AI
 
-    def _handle_click(self, pos: tuple[int, int]) -> None:
-        # Mode selection
-        if self._rect_hvh.collidepoint(pos):
-            self.config.mode = GameMode.HUMAN_VS_HUMAN
-        elif self._rect_hvc.collidepoint(pos):
-            self.config.mode = GameMode.HUMAN_VS_AI
+            if self.config.mode == GameMode.HUMAN_VS_AI:
+                for i, r in enumerate(self._chip_rects):
+                    if r.collidepoint(event.pos):
+                        self.config.difficulty = list(Difficulty)[i]
 
-        # Difficulty chips (only interactive in HvAI mode)
-        if self.config.mode == GameMode.HUMAN_VS_AI:
-            for i, r in enumerate(self._chip_rects):
-                if r.collidepoint(pos):
-                    self.config.difficulty = list(Difficulty)[i]
+            if self._rect_start.collidepoint(event.pos):
+                # Save the names into the config before leaving
+                self.config.p1_name = self._tb_p1.text.strip() or "You"
+                self.config.p2_name = self._tb_p2.text.strip() or "Player 2"
 
-        # Start button
-        if self._rect_start.collidepoint(pos):
-            self._launch_game()
-
-    def _launch_game(self) -> None:
-        """Transition to GameScene with the current config."""
-        from src.ui.game_scene import GameScene  # deferred – avoids circular import
-        self.manager.switch_fade(GameScene(self.manager, self.config))
-
-    # ── Update ──────────────────────────────────────────────────────────────
+                from src.ui.game_scene import GameScene
+                self.manager.switch(GameScene(self.manager, self.config))
 
     def update(self, dt: float) -> None:
-        dt_s          = dt / 1000.0
+        dt_s = dt / 1000.0
         self._anim_t += dt_s
         for p in self._particles:
             p.update(dt_s, self.W, self.H)
 
-    # ── Draw ─────────────────────────────────────────────────────────────────
-
     def draw(self, screen: pygame.Surface) -> None:
         screen.fill(BG_MAIN)
-
-        # Ambient particles (behind everything)
         for p in self._particles:
             p.draw(screen)
 
-        # Right panel
-        pygame.draw.rect(screen, BG_PANEL, pygame.Rect(560, 0, 340, self.H))
-        self._draw_right_panel(screen)
+        # ── Right Panel ──
+        right_w = 400
+        right_x = self.W - right_w
+        pygame.draw.rect(screen, BG_PANEL, (right_x, 0, right_w, self.H))
+        pygame.draw.line(screen, BORDER, (right_x, 0), (right_x, self.H))
+        self._draw_board_preview(screen, right_x + (right_w // 2), self.H // 2)
 
-        # Left panel content
-        self._draw_left_panel(screen)
+        # ── Left Content ──
+        title = self._font_title.render("QUORIDOR", True, TEXT_PRI)
+        screen.blit(title, (60, 80))
+        sub = self._font_sub.render("CSE472s · AI Project", True, TEXT_DIM)
+        screen.blit(sub, (64, 160))
 
-        # Entrance fade-in overlay (drawn last so it dims everything)
-        self._draw_entrance_fade(screen)
+        # ── Mode Selection ──
+        self._draw_sect_label(screen, "GAME MODE", 60, 225)
+        self._draw_mode_card(screen, self._rect_hvh, "Human vs. Human", self.config.mode == GameMode.HUMAN_VS_HUMAN)
+        self._draw_mode_card(screen, self._rect_hvc, "Human vs. Computer", self.config.mode == GameMode.HUMAN_VS_AI)
 
-    # ── Panel renderers ──────────────────────────────────────────────────────
+        # ── Names & Difficulty ──
+        ai_active = self.config.mode == GameMode.HUMAN_VS_AI
 
-    def _draw_left_panel(self, screen: pygame.Surface) -> None:
-        """Render the title, tagline, mode cards, difficulty chips, and start button."""
-        mp = pygame.mouse.get_pos()
+        if not ai_active:
+            self._draw_sect_label(screen, "PLAYER 1 NAME", 60, 420)
+            self._tb_p1.draw(screen, self._font_btn)
+            self._draw_sect_label(screen, "PLAYER 2 NAME", 280, 420)
+            self._tb_p2.draw(screen, self._font_btn)
+        else:
+            self._draw_sect_label(screen, "YOUR NAME", 60, 420)
+            self._tb_p1.draw(screen, self._font_btn)
+            self._draw_sect_label(screen, "OPPONENT", 60, 520)
 
-        # ── Title ─────────────────────────────────────────────────────────
-        # Two-pass tint: base colour + translucent purple wash
-        title_base = self._font_title.render("QUORIDOR", True, TEXT_PRI)
-        title_tint = self._font_title.render("QUORIDOR", True, PURPLE)
-        title_tint.set_alpha(55)
-        screen.blit(title_base, (60, 80))
-        screen.blit(title_tint, (60, 80))
+            # Pure UI display names (Engine still safely uses 1, 2, 3 internally)
+            diff_names = ["Easy (Ashraf)", "Medium (Yahia)", "Hard (Amr)"]
+            for i, r in enumerate(self._chip_rects):
+                is_sel = (self.config.difficulty.value == (i + 1))
+                self._draw_chip(screen, r, diff_names[i], is_sel)
 
-        # Tagline
-        tag = self._font_sub.render(
-            "Grandmaster Edition  ·  Strategy Board Game", True, TEXT_DIM
-        )
-        screen.blit(tag, (62, 158))
+        # ── Start Button ──
+        hover = self._rect_start.collidepoint(pygame.mouse.get_pos())
+        self._draw_start_btn(screen, self._rect_start, hover)
 
-        # Subtle separator
-        pygame.draw.line(screen, BORDER, (60, 184), (510, 184), 1)
-
-        # ── Mode label ────────────────────────────────────────────────────
-        self._draw_sect_label(screen, "GAME MODE", 60, 238)
-        self._draw_mode_card(
-            screen, self._rect_hvh, "⚔   Human vs. Human",
-            self.config.mode == GameMode.HUMAN_VS_HUMAN, mp,
-        )
-        self._draw_mode_card(
-            screen, self._rect_hvc, "🤖  Human vs. Computer",
-            self.config.mode == GameMode.HUMAN_VS_AI, mp,
-        )
-
-        # ── Difficulty chips ──────────────────────────────────────────────
-        ai_active = (self.config.mode == GameMode.HUMAN_VS_AI)
-        self._draw_sect_label(screen, "AI DIFFICULTY", 60, 468,
-                              alpha=255 if ai_active else 80)
-
-        diff_labels = ["Easy", "Medium", "Hard"]
-        for i, (rect, label) in enumerate(zip(self._chip_rects, diff_labels)):
-            selected = ai_active and (self.config.difficulty.value == i + 1)
-            self._draw_chip(screen, rect, label, selected, ai_active)
-
-        # ── Start button ──────────────────────────────────────────────────
-        self._draw_start_btn(screen, self._rect_start, mp)
-
-    def _draw_right_panel(self, screen: pygame.Surface) -> None:
-        """Render the animated mini board and decorative copy text."""
-        self._draw_board_preview(screen, cx=730, cy=340)
-
-        # Panel heading
-        h = self._font_sect.render("BOARD PREVIEW", True, TEXT_DIM)
-        screen.blit(h, h.get_rect(centerx=730, top=130))
-
-        # Short description paragraphs
-        lines = [
-            "Place walls to block",
-            "your opponent.",
-            "",
-            "Be first to cross",
-            "to the opposite side.",
-        ]
-        for i, line in enumerate(lines):
-            t = self._font_body.render(line, True, TEXT_SEC)
-            screen.blit(t, t.get_rect(centerx=730, top=540 + i * 22))
-
-    def _draw_entrance_fade(self, screen: pygame.Surface) -> None:
-        """Draw a black overlay that fades from opaque to transparent on entry."""
-        elapsed = _time.monotonic() - self._enter_t
-        t       = min(1.0, elapsed / _FADE_IN_DURATION)
-        alpha   = int(255 * (1.0 - t))
-        if alpha <= 0:
-            return
-        self._fade_surf.set_alpha(alpha)
-        screen.blit(self._fade_surf, (0, 0))
-
-    # ── Widget drawers ───────────────────────────────────────────────────────
-
-    def _draw_mode_card(
-        self,
-        screen: pygame.Surface,
-        rect:   pygame.Rect,
-        label:  str,
-        active: bool,
-        mp:     tuple[int, int],
-    ) -> None:
-        """Render a mode selection card with hover + selection states."""
-        hover   = rect.collidepoint(mp)
-        bg      = BG_CARD_A if (active or hover) else BG_CARD
-        brd     = BORDER_A  if (active or hover) else BORDER
-        txt_col = TEXT_PRI  if active else (TEXT_SEC if hover else TEXT_DIM)
-
-        pygame.draw.rect(screen, bg,  rect, border_radius=12)
+    def _draw_mode_card(self, screen, rect, label, active):
+        hover = rect.collidepoint(pygame.mouse.get_pos())
+        bg = BG_CARD_A if (active or hover) else BG_CARD
+        brd = BORDER_A if (active or hover) else BORDER
+        pygame.draw.rect(screen, bg, rect, border_radius=12)
         pygame.draw.rect(screen, brd, rect, width=1, border_radius=12)
 
-        # Active: left-edge accent bar
-        if active:
-            bar = pygame.Rect(rect.x, rect.y + 12, 3, rect.h - 24)
-            pygame.draw.rect(screen, PURPLE, bar, border_radius=2)
-
+        txt_col = TEXT_PRI if active else (TEXT_SEC if hover else TEXT_DIM)
         lbl = self._font_btn.render(label, True, txt_col)
-        screen.blit(lbl, lbl.get_rect(midleft=(rect.x + 24, rect.centery)))
-
-    def _draw_chip(
-        self,
-        screen:   pygame.Surface,
-        rect:     pygame.Rect,
-        label:    str,
-        selected: bool,
-        enabled:  bool,
-    ) -> None:
-        """Render a pill-shaped difficulty selection chip."""
-        alpha   = 255 if enabled else 70
-        bg      = BG_CARD_A if selected else BG_CARD
-        brd     = BORDER_A  if selected else BORDER
-        txt_col = TEXT_PRI  if selected else TEXT_DIM
-
-        s = pygame.Surface((rect.w, rect.h), pygame.SRCALPHA)
-        pygame.draw.rect(s, (*bg,  alpha), (0, 0, rect.w, rect.h), border_radius=23)
-        pygame.draw.rect(s, (*brd, alpha), (0, 0, rect.w, rect.h),
-                         width=1, border_radius=23)
-        screen.blit(s, rect.topleft)
-
-        lbl = self._font_sect.render(label.upper(), True, txt_col)
-        lbl.set_alpha(alpha)
         screen.blit(lbl, lbl.get_rect(center=rect.center))
 
-    def _draw_start_btn(
-        self,
-        screen: pygame.Surface,
-        rect:   pygame.Rect,
-        mp:     tuple[int, int],
-    ) -> None:
-        """Render the primary 'Start Mission' button with a breathing glow."""
-        hover   = rect.collidepoint(mp)
-        pulse   = (math.sin(self._anim_t * 3.5) + 1) / 2   # 0..1
+    def _draw_chip(self, screen, rect, label, selected):
+        bg = BG_CARD_A if selected else BG_CARD
+        brd = BORDER_A if selected else BORDER
 
-        # Outer glow ring (subtle pulsing)
-        glow_r = int(4 + 6 * pulse)
-        glow   = rect.inflate(glow_r, glow_r)
-        glow_s = pygame.Surface((glow.w, glow.h), pygame.SRCALPHA)
-        pygame.draw.rect(glow_s, (*PURPLE, int(40 * pulse)),
-                         (0, 0, glow.w, glow.h), border_radius=14)
-        screen.blit(glow_s, glow.topleft)
+        pygame.draw.rect(screen, bg, rect, border_radius=20)
+        pygame.draw.rect(screen, brd, rect, width=1, border_radius=20)
 
-        # Button fill
-        col = PURPLE if hover else PURPLE_DK
-        pygame.draw.rect(screen, col, rect, border_radius=12)
+        txt_col = TEXT_PRI if selected else TEXT_DIM
+        lbl = self._font_sect.render(label.upper(), True, txt_col)
+        screen.blit(lbl, lbl.get_rect(center=rect.center))
 
-        # Arrow shifts right on hover for a "press" feel
-        arrow_offset = 4 if hover else 0
-        lbl = self._font_btn.render("START MISSION", True, (255, 255, 255))
-        arrow = self._font_btn.render("→", True, AMBER)
+    def _draw_start_btn(self, screen, rect, hover):
+        color = PURPLE if hover else PURPLE_DK
+        pygame.draw.rect(screen, color, rect, border_radius=12)
+        lbl = self._font_btn.render("START →", True, (255,255,255))
+        screen.blit(lbl, lbl.get_rect(center=rect.center))
 
-        total_w = lbl.get_width() + 14 + arrow.get_width()
-        start_x = rect.centerx - total_w // 2
-        lbl_y   = rect.centery - lbl.get_height() // 2
-        screen.blit(lbl, (start_x, lbl_y))
-        screen.blit(arrow, (start_x + lbl.get_width() + 14 + arrow_offset, lbl_y))
-
-    def _draw_sect_label(
-        self,
-        screen: pygame.Surface,
-        text:   str,
-        x:      int,
-        y:      int,
-        alpha:  int = 255,
-    ) -> None:
-        """Render a small all-caps section header."""
+    def _draw_sect_label(self, screen, text, x, y, alpha=255):
         lbl = self._font_sect.render(text, True, TEXT_DIM)
         lbl.set_alpha(alpha)
         screen.blit(lbl, (x, y))
 
-    def _draw_board_preview(
-        self,
-        screen: pygame.Surface,
-        cx:     int,
-        cy:     int,
-    ) -> None:
-        """
-        Draw the animated mini 9×9 board preview on the right panel.
+    def _draw_board_preview(self, screen, cx, cy):
+        """Draws the animated mini 9x9 grid, matching the real board UI."""
+        cell, wall = 30, 8
+        step = cell + wall
+        total_size = 9 * cell + 8 * wall
+        ox, oy = cx - total_size // 2, cy - total_size // 2
 
-        Animated elements:
-          • Grid cells pulse between two shades in a subtle wave pattern.
-          • Player pawns have a breathing aura ring.
-          • A few static amber walls are pre-placed for visual interest.
-        """
-        cell  = 26
-        gap   = 3
-        step  = cell + gap
-        total = 9 * step - gap
-        ox    = cx - total // 2
-        oy    = cy - total // 2
+        _BG_GUTTER, _CELL_IDLE, _CELL_BORDER = (12, 11, 20), (28, 25, 44), (38, 34, 60)
+        _WALL_COLOR, _SPEC_WHITE = (239, 159, 39), (255, 255, 255)
+        _P1_COLOR, _P2_COLOR = (210, 40, 40), (40, 80, 210)
 
-        wave  = (math.sin(self._anim_t * 1.5) + 1) / 2  # 0..1 slow pulse
+        gutter = pygame.Rect(ox - 3, oy - 3, total_size + 6, total_size + 6)
+        pygame.draw.rect(screen, _BG_GUTTER, gutter, border_radius=8)
 
-        # Draw grid cells
+        frame = pygame.Rect(ox - 12, oy - 12, total_size + 24, total_size + 24)
+        pygame.draw.rect(screen, _CELL_BORDER, frame, width=2, border_radius=12)
+
         for r in range(9):
             for c in range(9):
-                # Goal rows get a faint tint
-                if r == 0:
-                    base = (8, 48, 38)   # teal tint for P2 goal
-                elif r == 8:
-                    base = (38, 16, 28)  # red tint for P1 goal
-                else:
-                    base = (26, 24, 42)
-
                 rect = pygame.Rect(ox + c * step, oy + r * step, cell, cell)
-                pygame.draw.rect(screen, base, rect, border_radius=3)
+                pygame.draw.rect(screen, _CELL_IDLE, rect, border_radius=4)
+                pygame.draw.rect(screen, _CELL_BORDER, rect, width=1, border_radius=4)
 
-        # Static decorative walls
-        for r, c in [(3, 2), (3, 3), (5, 5), (5, 6)]:
-            # Horizontal wall stub
-            wr = pygame.Rect(ox + c * step, oy + (r + 1) * step - gap,
-                             cell * 2 + gap, gap + 2)
-            if wr.right < ox + total and wr.bottom < oy + total:
-                pygame.draw.rect(screen, AMBER, wr, border_radius=2)
+        for r, c in [(6, 3)]:
+            wr = pygame.Rect(ox + c * step, oy + (r + 1) * step - wall, cell * 2 + wall, wall)
+            pygame.draw.rect(screen, _WALL_COLOR, wr, border_radius=3)
+        for r, c in [(2, 2)]:
+            wr = pygame.Rect(ox + (c + 1) * step - wall, oy + r * step, wall, cell * 2 + wall)
+            pygame.draw.rect(screen, _WALL_COLOR, wr, border_radius=3)
 
-        # Pawn positions
-        p1_pos = (ox + 4 * step + cell // 2, oy + 8 * step + cell // 2)
-        p2_pos = (ox + 4 * step + cell // 2, oy + 0 * step + cell // 2)
+        pulse = (math.sin(self._anim_t * 2) + 1) / 2
+        aura_r, pr = int(cell // 2 + 3 + 5 * pulse), cell // 3
 
-        # Aura rings (breathing)
-        aura_r = int(cell // 2 + 3 + 4 * wave)
-        for centre, col in ((p1_pos, (210, 40, 40)), (p2_pos, (40, 80, 210))):
-            s = pygame.Surface((aura_r * 4, aura_r * 4), pygame.SRCALPHA)
-            pygame.draw.circle(s, (*col, int(50 + 40 * wave)),
-                               (aura_r * 2, aura_r * 2), aura_r, width=2)
-            screen.blit(s, (centre[0] - aura_r * 2, centre[1] - aura_r * 2))
-
-        # Pawns
-        pygame.draw.circle(screen, (210,  40,  40), p1_pos, cell // 2 - 2)
-        pygame.draw.circle(screen, ( 40,  80, 210), p2_pos, cell // 2 - 2)
-
-        # Specular dots
-        for centre in (p1_pos, p2_pos):
-            pygame.draw.circle(screen, (255, 255, 255),
-                               (centre[0] - 3, centre[1] - 3), 2)
+        for centre, col in (((ox + 4 * step + cell // 2, oy + 7 * step + cell // 2), _P1_COLOR),
+                            ((ox + 4 * step + cell // 2, oy + 1 * step + cell // 2), _P2_COLOR)):
+            s = pygame.Surface((aura_r * 2, aura_r * 2), pygame.SRCALPHA)
+            pygame.draw.circle(s, (*col, int(40 + 60 * pulse)), (aura_r, aura_r), aura_r)
+            screen.blit(s, (centre[0] - aura_r, centre[1] - aura_r))
+            pygame.draw.circle(screen, col, centre, pr)
+            pygame.draw.circle(screen, _SPEC_WHITE, centre, max(2, pr // 4))
