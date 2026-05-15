@@ -158,7 +158,7 @@ def _get_strategic_actions(board):
 
 # Iterative Deepening
 def get_best_move_iterative(board, max_depth: int, ai_player: int,
-                            use_adv: bool, time_limit: float):
+                            use_adv: bool, time_limit: float, game_history: list = None):
     """
     Searches depth-by-depth until the time budget is exhausted or max_depth
     is reached.  The last *fully completed* search result is returned.
@@ -181,7 +181,7 @@ def get_best_move_iterative(board, max_depth: int, ai_player: int,
             break
 
         _, move = minimax(board, depth, float('-inf'), float('inf'),
-                          True, ai_player, use_adv, start_time, time_limit)
+                          True, ai_player, use_adv, start_time, time_limit, game_history)
         if move:
             best_action = move
 
@@ -191,7 +191,7 @@ def get_best_move_iterative(board, max_depth: int, ai_player: int,
 # Minimax with α-β + Transposition-table (depth added)
 def minimax(board, depth: int, alpha: float, beta: float,
             maximizing: bool, ai_player: int, use_adv: bool,
-            start_t: float, limit: float):
+            start_t: float, limit: float, game_history: list):
 
     # ── Transposition-table lookup ────────────────────────────────────────
     key = (board.positions[0], board.positions[1],
@@ -205,7 +205,7 @@ def minimax(board, depth: int, alpha: float, beta: float,
 
     # ── Terminal / leaf node ──────────────────────────────────────────────
     if time.time() - start_t > limit or depth == 0 or is_game_over(board):
-        return evaluate_board(board, ai_player, use_adv), None
+        return evaluate_board(board, ai_player, use_adv, game_history), None
 
     # ── Generate and order actions ────────────────────────────────────────
     actions = _get_strategic_actions(board)
@@ -222,7 +222,7 @@ def minimax(board, depth: int, alpha: float, beta: float,
                            action["anchor"], bool(action["horizontal"]))
 
             val, _ = minimax(sim, depth - 1, alpha, beta,
-                             False, ai_player, use_adv, start_t, limit)
+                             False, ai_player, use_adv, start_t, limit, game_history)
             if val > max_eval:
                 max_eval, best_move = val, action
             alpha = max(alpha, val)
@@ -243,7 +243,7 @@ def minimax(board, depth: int, alpha: float, beta: float,
                            action["anchor"], bool(action["horizontal"]))
 
             val, _ = minimax(sim, depth - 1, alpha, beta,
-                             True, ai_player, use_adv, start_t, limit)
+                             True, ai_player, use_adv, start_t, limit, game_history)
             if val < min_eval:
                 min_eval, best_move = val, action
             beta = min(beta, val)

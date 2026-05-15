@@ -21,7 +21,7 @@ def _centralisation(col: int) -> float:
     return 1.0 - abs(col - centre) / centre
 
 def evaluate_board(board: Board, ai_player: int,
-                   use_advanced_heuristic: bool) -> float:
+                   use_advanced_heuristic: bool, game_history: list = None) -> float:
 
     # Returns a score from the AI's perspective.
     # Positive  → AI is winning.
@@ -85,5 +85,12 @@ def evaluate_board(board: Board, ai_player: int,
 
             # Asymmetric Tie-Breaker
             score += (ai_pos[1] * 0.0001)
+
+    # THE LOOP KILLER: Position History Penalty
+    if game_history:
+        ai_pos = board.get_position(ai_player)
+        occurrences = game_history.count(ai_pos)
+        if occurrences > 0:
+            score -= (5.0 * occurrences)
 
     return score
