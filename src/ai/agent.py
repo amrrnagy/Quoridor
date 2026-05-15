@@ -1,32 +1,24 @@
-# ai/agent.py
-from ..engine.board import Board
-from ..ai.minimax import get_best_move_minimax
-
-# Adding a new difficulty = adding one line to the dict, not editing if/elif.
-# Keeps __init__ from growing as the game expands.
-_DIFFICULTY_CONFIG = {
-    "Easy":   {"depth": 1, "use_advanced_heuristic": False},
-    "Medium": {"depth": 3, "use_advanced_heuristic": False},
-    "Hard":   {"depth": 4, "use_advanced_heuristic": True},
-}
-_DEFAULT_CONFIG = {"depth": 3, "use_advanced_heuristic": False}
-
+# src/ai/agent.py
+from .minimax import get_best_move_iterative
 
 class AIAgent:
+    # Default is the Easy level
     def __init__(self, player_id: int, difficulty: str = "Easy"):
-        self.player_id  = player_id
-        self.difficulty = difficulty
+        self.player_id = player_id
+        # Implements multiple AI difficulty levels (e.g., Easy, Medium, Hard)
+        configs = {
+            "Easy":   {"depth": 1, "adv": False, "time": 0.5},
+            "Medium": {"depth": 6, "adv": False, "time": 2.0},
+            "Hard":   {"depth": 10, "adv": True,  "time": 4.5}
+        }
+        self.cfg = configs.get(difficulty, configs["Easy"])
 
-        config = _DIFFICULTY_CONFIG.get(difficulty, _DEFAULT_CONFIG)
-        self.depth                 = config["depth"]
-        self.use_advanced_heuristic = config["use_advanced_heuristic"]
-
-    def get_best_move(self, board: Board) -> dict:
-        """Kicks off the minimax search with difficulty-specific parameters."""
-        _, best_action = get_best_move_minimax(
-            board=board,
-            depth=self.depth,
-            ai_player=self.player_id,
-            use_advanced_heuristic=self.use_advanced_heuristic,
+    # An API that applies the iterative deepening with a time limit
+    def get_best_move(self, board) -> dict:
+        return get_best_move_iterative(
+            board,
+            self.cfg["depth"],
+            self.player_id,
+            self.cfg["adv"],
+            self.cfg["time"]
         )
-        return best_action
