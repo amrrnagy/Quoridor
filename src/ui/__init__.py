@@ -1,4 +1,4 @@
-# src/ui/__init__.py
+# src/ui/_init__.py
 from .scene_manager import SceneManager, Scene
 from .menu_scene import MenuScene
 from .game_scene import GameScene

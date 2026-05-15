@@ -14,13 +14,13 @@ P1 = 0
 P2 = 1   
 
 START_POSITIONS = {
-    P1: (0, 4),   # top-center
-    P2: (8, 4),   # bottom-center
+    P1: (8, 4),   # bottom-center
+    P2: (0, 4),   # top-center
 }
 
 GOAL_ROW = {
-    P1: 8,
-    P2: 0,
+    P1: 0,
+    P2: 8,
 }
 
 
