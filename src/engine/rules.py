@@ -1,7 +1,7 @@
-from typing import List, Optional, Tuple
-
+# src/engine/rules.py
 from .board import Board, Position, Wall, BOARD_SIZE, GOAL_ROW, P1, P2
 from .pathfinding import both_players_have_path
+from typing import List, Optional, Tuple
 
 
 def get_valid_pawn_moves(board: Board, player: int) -> List[Position]:
@@ -20,10 +20,10 @@ def get_valid_pawn_moves(board: Board, player: int) -> List[Position]:
             continue
 
         if (nr, nc) == opp_pos:
-            # in case the ooponent is adjacent, we may be able to jump over them (or diagonally if blocked)
+            # if opponent is adjacent, we may be able to jump over them (or diagonally if blocked)
             moves.extend(_jump_moves(board, r, c, dr, dc, opp_pos))
         else:
-            #move to the empty cell
+            # move to the empty cell
             moves.append((nr, nc))
 
     return moves
@@ -44,7 +44,6 @@ def _jump_moves(
 
     if straight_inside and not wall_behind:
         jumps.append((straight_r, straight_c))
-        # ab2a bos 3leehom tany claude ktb el logic da 
     else:
         # ─ Diagonal jumps (wall or edge behind opponent)
         # Try the two perpendicular directions relative to the jump axis
@@ -72,12 +71,13 @@ def is_valid_wall(
     horizontal: bool,
 ) -> bool:
     
- #check that the player has walls left
+    # check that the player has walls left
     if board.walls_left[player] <= 0:
         return False
 
     ar, ac = anchor
-# check that the wall is within bounds 
+
+    # check that the wall is within bounds
     if not (0 <= ar <= BOARD_SIZE - 2 and 0 <= ac <= BOARD_SIZE - 2):
         return False
 
@@ -104,8 +104,8 @@ def is_valid_wall(
         # Crosses a horizontal wall at the same anchor
         if anchor in board.h_walls:
             return False
-# Finally, check that the wall doesn't completely block  player 
-# mafrood el function di ttktb b3d ma el pathfinding yt3ml w yb2a feh function tcheck lw el wall da bysdd el taree2 kollaha wla la2
+
+    # Finally, check that the wall doesn't completely block player
     test_board = board.copy()
     if horizontal:
         test_board.h_walls.add(anchor)
@@ -157,20 +157,15 @@ def apply_wall(
     board.place_wall(player, anchor, horizontal)
 
 
-
-
+# Return True once a player has reached their goal row
 def is_game_over(board: Board) -> bool:
-    """Return True once a player has reached their goal row."""
     return board.winner is not None
 
-
+# Return Winner (None if the game is still ongoing)
 def get_winner(board: Board) -> Optional[int]:
-    """Return the winning player index, or None if the game is still ongoing."""
     return board.winner
 
-
-# claude recommended having this function to help the AI iterate over all legal actions in a uniform way without having to call the separate functions for pawn moves and wall placements
-# must first see the logic implemented in the pathfinding module to see how we will use this function
+# API to help iterate through legal actions only
 def get_all_legal_actions(board: Board) -> List[dict]:
     """
     Return a unified list of legal actions for the current player.

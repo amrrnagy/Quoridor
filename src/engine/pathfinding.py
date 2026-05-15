@@ -1,27 +1,11 @@
-"""
-engine/pathfinding.py
-Member 2 — Pathfinding module
-
-Provides BFS-based pathfinding for Quoridor.
-Used by:
-  - rules.py  → both_players_have_path() to validate wall placements
-  - AI module → shortest_path_length() for the evaluation heuristic
-"""
-
+# src/engine/pathfinding.py
+from .board import Board, Position, GOAL_ROW, P1, P2
 from collections import deque
 from typing import List, Optional
 
-from .board import Board, Position, BOARD_SIZE, GOAL_ROW, P1, P2
-
-
-# ─────────────────────────────────────────────────────────────
-# CORE BFS  (internal — not imported by anyone directly)
-# ─────────────────────────────────────────────────────────────
-
+# Core BFS
 def _bfs(board: Board, start: Position, goal_row: int) -> Optional[List[Position]]:
     """
-    Internal BFS from `start` to any cell on `goal_row`.
-
     Returns the full path as a list of positions [start, ..., goal],
     or None if no path exists (player is completely blocked).
 
@@ -31,9 +15,6 @@ def _bfs(board: Board, start: Position, goal_row: int) -> Optional[List[Position
       3. For each neighbor: check in-bounds, not visited, no wall between.
       4. If we reach goal_row → reconstruct and return the path.
       5. If queue empties with no goal found → return None (blocked).
-
-    Wall checking is fully delegated to board.has_wall_between() —
-    Member 1 already handles all the wall logic there.
     """
     # Edge case: pawn already on goal row
     if start[0] == goal_row:
@@ -94,8 +75,7 @@ def _reconstruct_path(
 
 
 # ─────────────────────────────────────────────────────────────
-# PUBLIC API
-# These 4 functions are what everyone else imports from this file.
+# APIs (what everyone else imports from this file)
 # ─────────────────────────────────────────────────────────────
 
 def has_path(board: Board, player: int) -> bool:
@@ -139,7 +119,7 @@ def shortest_path_length(board: Board, player: int) -> Optional[int]:
     Return the number of steps in the shortest path for `player`,
     or None if the player is completely blocked.
 
-    This is what Member 3 (AI) uses in the evaluation function:
+    This is what AI uses in the evaluation function:
 
         ai_dist  = shortest_path_length(board, ai_player)
         opp_dist = shortest_path_length(board, opponent)

@@ -1,5 +1,6 @@
+# src/engine/player.py
+
 """
-engine/player.py
 Member 2 — Player module (small helper, required by __init__.py)
 
 Defines the Player type and two factory functions:
