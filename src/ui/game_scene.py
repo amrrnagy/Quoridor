@@ -306,6 +306,19 @@ class GameScene(Scene):
             pygame.draw.circle(ghost, (*BG_PANEL, alpha), (radius, radius), max(2, radius - 4))
             screen.blit(ghost, (cx - radius, cy - radius))
 
+    def _get_friendly_error(self, raw_msg: str) -> str:
+        """Translates raw engine exceptions into user-friendly UI messages."""
+        msg = raw_msg.lower()
+        if "pawn move" in msg:
+            return "Invalid move: You cannot move your pawn there."
+        if "block" in msg or "path" in msg:
+            return "Invalid wall: This completely blocks a player's path."
+        if "no walls" in msg or "out of walls" in msg:
+            return "Invalid wall: You have no walls left to place."
+        if "wall placement" in msg or "overlap" in msg or "intersect" in msg:
+            return "Invalid wall: You cannot place a wall there."
+        return "Invalid move: Action not allowed."
+
     def _handle_board_click(self, pos: tuple) -> None:
         if self.agent and self.board.current_player == P2: return
         click_type, data = self.board_view.identify_click(pos)
@@ -325,7 +338,9 @@ class GameScene(Scene):
             if self.agent and not is_game_over(self.board) and self.board.current_player == P2:
                 self._launch_ai_thread()
         except ValueError as e:
-            self._flash_invalid(str(e))
+            # Catch the raw engine error and translate it!
+            friendly_msg = self._get_friendly_error(str(e))
+            self._flash_invalid(friendly_msg)
 
     def _launch_ai_thread(self) -> None:
         self._ai_thinking = True
@@ -379,14 +394,33 @@ class GameScene(Scene):
         self._invalid_timer = 2000
 
     def _draw_invalid_banner(self, screen, alpha):
-        surf = self._font_small.render(f"⚠ {self._invalid_msg}", True, RED_LIGHT)
-        pad = pygame.Rect(0, 0, surf.get_width() + 28, surf.get_height() + 16)
+        # Render just the text (no warning glyph in the string)
+        surf = self._font_small.render(self._invalid_msg, True, RED_LIGHT)
+
+        # Calculate padding to comfortably fit the new icon and text
+        pad_w = surf.get_width() + 44
+        pad_h = surf.get_height() + 16
+        pad = pygame.Rect(0, 0, pad_w, pad_h)
         pad.centerx = (self.W - SIDEBAR_W) // 2
-        pad.bottom = self.H - 20
+        pad.bottom = self.H - 24  # Lifted slightly for better spacing
+
+        # Draw background card with rounded corners
         banner = pygame.Surface((pad.w, pad.h), pygame.SRCALPHA)
-        banner.fill((*RED_DARK, alpha))
+        pygame.draw.rect(banner, (*RED_DARK, alpha), (0, 0, pad.w, pad.h), border_radius=6)
+        pygame.draw.rect(banner, (*RED_LIGHT, alpha), (0, 0, pad.w, pad.h), width=1, border_radius=6)
+
+        # Procedural Warning Triangle (!)
+        cx, cy = 18, pad.h // 2
+        pygame.draw.polygon(banner, (*RED_LIGHT, alpha), [(cx, cy - 6), (cx - 7, cy + 6), (cx + 7, cy + 6)], 2)
+        pygame.draw.rect(banner, (*RED_LIGHT, alpha), (cx - 1, cy - 2, 2, 4))  # Exclamation top line
+        pygame.draw.rect(banner, (*RED_LIGHT, alpha), (cx - 1, cy + 4, 2, 2))  # Exclamation bottom dot
+
         screen.blit(banner, pad.topleft)
-        screen.blit(surf, (pad.x + 14, pad.y + 8))
+
+        # Blit the text next to the icon
+        txt_surf = surf.copy()
+        txt_surf.set_alpha(alpha)
+        screen.blit(txt_surf, (pad.x + 32, pad.y + 8))
 
     def _draw_sidebar(self, screen: pygame.Surface) -> None:
         sx = self.W - SIDEBAR_W
@@ -445,10 +479,19 @@ class GameScene(Scene):
         walls = [self.board.get_walls_left(P1), self.board.get_walls_left(P2)]
         for i, (cnt, col, label) in enumerate(zip(walls, [RED_PLAYER, BLUE_AI], ["Red", "Blue"])):
             py = y + 56 + i * 42
+
+            # Draw the player icon
             self._draw_icon_player(screen, (x + 24, py), col, scale=0.8)
+
+            # Draw the 10 indicator squares
             for w in range(10):
                 wr = pygame.Rect(x + 44 + w * 14, py - 6, 10, 10)
                 pygame.draw.rect(screen, col if w < cnt else BORDER, wr, border_radius=3)
+
+            # Draw the numeric count right after the squares
+            lbl_count = self._font_body.render(str(cnt), True, TEXT_PRI)
+            screen.blit(lbl_count, (x + 192, py - lbl_count.get_height() // 2))
+
         y += 136
 
         # 4. Action Buttons
