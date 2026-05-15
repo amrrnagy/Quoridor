@@ -45,7 +45,7 @@ import time as _time
 
 import pygame
 from src.ui.scene_manager import Scene, SceneManager
-from src.game_config import GameConfig
+from src.ui.game_config import GameConfig
 from src.engine.board import P1, P2
 
 # ── palette ───────────────────────────────────────────────────────────────

@@ -30,7 +30,7 @@ import random
 import pygame
 
 from src.ui.scene_manager import Scene, SceneManager
-from src.game_config import GameConfig, GameMode, Difficulty
+from src.ui.game_config import GameConfig, GameMode
 
 # ── colour palette (consistent across Grandmaster Edition) ──
 BG_MAIN    = (18,  17,  26)
@@ -110,7 +110,7 @@ class MenuScene(Scene):
             if self.config.mode == GameMode.HUMAN_VS_AI:
                 for i, r in enumerate(self._chip_rects):
                     if r.collidepoint(event.pos):
-                        from src.game_config import Difficulty
+                        from src.ui.game_config import Difficulty
                         self.config.difficulty = list(Difficulty)[i]
 
             if self._rect_start.collidepoint(event.pos):

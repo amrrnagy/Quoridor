@@ -40,7 +40,7 @@ import time as _time
 import pygame
 
 from src.ui.scene_manager import Scene, SceneManager
-from src.game_config import GameConfig, GameMode
+from src.ui.game_config import GameConfig, GameMode
 from src.engine.board import Board, P1, P2
 from src.engine.rules import (
     apply_pawn_move, apply_wall,
